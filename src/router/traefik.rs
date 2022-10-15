@@ -1,0 +1,76 @@
+use lazy_static::lazy_static;
+use regex::Regex;
+use reqwest::{Client, IntoUrl, Url};
+use serde::Deserialize;
+use thiserror::Error;
+use crate::router::Route;
+
+lazy_static! {
+    static ref HOST_REGEX: Regex = Regex::new("Host\\(`(.+?)`\\)").unwrap();
+}
+
+#[derive(Debug)]
+pub struct TraefikRouter {
+    base_url: Url,
+    client: Client,
+}
+
+impl TraefikRouter {
+    pub fn new<U: IntoUrl>(url: U) -> Result<Self, TraefikError> {
+        let base_url = url.into_url()?;
+
+        if base_url.cannot_be_a_base() {
+            Err(TraefikError::BadBaseUrl)
+        } else {
+            Ok(Self {
+                base_url,
+                client: Client::new(),
+            })
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl super::Router for TraefikRouter {
+    type Error = TraefikError;
+
+    async fn get_routes(&self) -> Result<Vec<Route>, Self::Error> {
+        let url = self.base_url.join("api/http/routers")?;
+        let routes = self.client.get(url)
+            .send()
+            .await?
+            .json::<Vec<TraefikRoute>>()
+            .await?;
+
+        Ok(routes.iter()
+            .flat_map(|r| parse_domains(&r.rule)
+                .into_iter().map(|d| Route {
+                id: r.name.clone(),
+                host: d.to_owned(),
+            }))
+            .collect())
+    }
+}
+
+/// Parses domains out of Traefik Rule expressions.
+fn parse_domains(rule: &str) -> Vec<&str> {
+    HOST_REGEX.captures_iter(rule)
+        .map(|cap| cap.get(1).unwrap().as_str())
+        .collect()
+}
+
+#[derive(Debug, Error)]
+pub enum TraefikError {
+    #[error(transparent)]
+    ReqwestError(#[from] reqwest::Error),
+    #[error("bad base url")]
+    BadBaseUrl,
+    #[error(transparent)]
+    UrlParseError(#[from] url::ParseError),
+}
+
+#[derive(Debug, Deserialize)]
+struct TraefikRoute {
+    rule: String,
+    name: String,
+}

@@ -1,0 +1,27 @@
+[package]
+name = "traefik-dns"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["aws"]
+
+aws = ["aws-config", "aws-sdk-route53"]
+cf = ["cloudflare", "anyhow"]
+
+[dependencies]
+anyhow = { version = "1.0.65", optional = true }
+async-trait = "0.1.57"
+aws-config = { version = "0.49.0", optional = true }
+aws-sdk-route53 = { version = "0.19.0", optional = true }
+cloudflare = { version = "0.9.1", optional = true, default-features = false, features = ["rustls-tls"] }
+futures = "0.3.24"
+lazy_static = "1.4.0"
+regex = "1.6.0"
+reqwest = { version = "0.11.12", features = ["json", "rustls-tls"], default-features = false }
+serde = { version = "1.0.145", features = ["derive"] }
+thiserror = "1.0.37"
+tokio = { version = "1.21.2", features = ["full"] }
+url = "2.3.1"
