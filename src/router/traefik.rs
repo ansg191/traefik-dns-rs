@@ -3,6 +3,7 @@ use regex::Regex;
 use reqwest::{Client, IntoUrl, Url};
 use serde::Deserialize;
 use thiserror::Error;
+use tracing::debug;
 use crate::router::Route;
 
 static HOST_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new("Host\\(`(.+?)`\\)").unwrap());
@@ -32,6 +33,7 @@ impl TraefikRouter {
 impl super::Router for TraefikRouter {
     type Error = TraefikError;
 
+    #[tracing::instrument(skip(self))]
     async fn get_routes(&self) -> Result<Vec<Route>, Self::Error> {
         let url = self.base_url.join("api/http/routers")?;
         let routes = self.client.get(url)
@@ -39,6 +41,8 @@ impl super::Router for TraefikRouter {
             .await?
             .json::<Vec<TraefikRoute>>()
             .await?;
+
+        debug!(?routes, "got {} routes from Traefik", routes.len());
 
         Ok(routes.iter()
             .flat_map(|r| parse_domains(&r.rule)
