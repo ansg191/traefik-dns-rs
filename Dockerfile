@@ -1,21 +1,22 @@
-FROM rust:1-alpine3.16 as builder
+FROM rust:1-alpine3.16 as chef
 
 ENV RUSTFLAGS="-C target-feature=-crt-static"
 
-RUN apk add --no-cache musl-dev
+RUN apk add --no-cache musl-dev && \
+    cargo install cargo-chef
 
 WORKDIR /app
-RUN cargo init
 
-COPY Cargo.toml ./Cargo.toml
+FROM chef as planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
 
+FROM chef as builder
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+
+COPY . .
 RUN cargo build --release
-RUN rm -rf src
-
-COPY src/ ./src
-RUN touch src/main.rs
-
-RUN cargo build --release --offline
 RUN strip target/release/traefik-dns
 
 FROM alpine:3.16
