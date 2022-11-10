@@ -64,6 +64,7 @@ impl Provider for Route53Provider {
         &mut self.dest
     }
 
+    #[tracing::instrument(skip(self), level = "info")]
     async fn list_records(&self) -> Result<Vec<String>, Self::Error> {
         Ok(self.client.list_resource_record_sets()
             .hosted_zone_id(self.hosted_zone_id.clone())
@@ -88,6 +89,7 @@ impl Provider for Route53Provider {
             .collect())
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     async fn create_record(&self, host: &str) -> Result<(), Self::Error> {
         self.client.change_resource_record_sets()
             .hosted_zone_id(self.hosted_zone_id.clone())
@@ -98,6 +100,7 @@ impl Provider for Route53Provider {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), level = "info")]
     async fn delete_record(&self, host: &str) -> Result<(), Self::Error> {
         let records = self.client.list_resource_record_sets()
             .hosted_zone_id(self.hosted_zone_id.clone())

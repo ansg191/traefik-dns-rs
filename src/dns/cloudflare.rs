@@ -68,11 +68,13 @@ impl super::Provider for CloudflareProvider {
     fn destination(&self) -> &str { &self.dest }
     fn destination_mut(&mut self) -> &mut String { &mut self.dest }
 
+    #[tracing::instrument(skip(self))]
     async fn list_records(&self) -> Result<Vec<String>, Self::Error> {
         let records = self.list_records().await?;
         Ok(records.into_iter().map(|r| r.name).collect())
     }
 
+    #[tracing::instrument(skip(self))]
     async fn create_record(&self, host: &str) -> Result<(), Self::Error> {
         let request = CreateDnsRecord {
             zone_identifier: &self.zone_id,
@@ -91,6 +93,7 @@ impl super::Provider for CloudflareProvider {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     async fn delete_record(&self, host: &str) -> Result<(), Self::Error> {
         let record = self.list_records().await?
             .into_iter()

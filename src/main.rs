@@ -5,6 +5,7 @@ use tokio::{
     time,
     time::MissedTickBehavior,
 };
+use tracing::{error, info};
 use crate::{
     dns::{
         Provider,
@@ -23,6 +24,9 @@ const UPDATE_INTERVAL: Duration = Duration::from_secs(10);
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let subscriber = tracing_subscriber::FmtSubscriber::new();
+    tracing::subscriber::set_global_default(subscriber)?;
+
     let zone = std::env::var("ROUTE53_ZONE_ID")?;
     let traefik_url = std::env::var("TRAEFIK_API_URL")?;
     let cluster_domain = std::env::var("CLUSTER_DOMAIN")?;
@@ -40,10 +44,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let timeout = time::timeout(UPDATE_INTERVAL, update_routes(&d, &r)).await;
         if let Ok(res) = timeout {
             if let Err(e) = res {
-                eprintln!("update_routes error: {}", e);
+                error!("route updating returned an error error: {}", e);
             }
         } else {
-            eprintln!("update_routes timed out");
+            error!("route updating timed out");
         }
     }
 }
@@ -60,10 +64,7 @@ async fn update_routes<D, R>(d: &D, r: &R) -> Result<(), UpdateRoutesError<D, R>
 
     // Add all active routes
     futures::future::try_join_all(
-        routes.iter().map(|domain| {
-            println!("Domain: {}", domain);
-            d.create_record(domain)
-        })
+        routes.iter().map(|domain| d.create_record(domain))
     ).await
         .map_err(UpdateRoutesError::<D, R>::ProviderError)?;
 
@@ -74,7 +75,7 @@ async fn update_routes<D, R>(d: &D, r: &R) -> Result<(), UpdateRoutesError<D, R>
         .filter(|s| !routes.contains(s))
         .collect();
 
-    println!("Routes to delete: {:?}", routes_to_delete);
+    info!(routes = ?routes_to_delete, "Deleting {} routes", routes_to_delete.len());
 
     // Delete inactive routes
     futures::future::try_join_all(
