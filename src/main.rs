@@ -52,10 +52,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
+#[tracing::instrument(skip(d, r), level = "info")]
 async fn update_routes<D, R>(d: &D, r: &R) -> Result<(), UpdateRoutesError<D, R>>
     where
         D: Provider,
         R: Router {
+    info!("updating routes");
+
     let routes: HashSet<_> = r.get_routes().await
         .map_err(UpdateRoutesError::<D, R>::RouterError)?
         .into_iter()
@@ -75,7 +78,9 @@ async fn update_routes<D, R>(d: &D, r: &R) -> Result<(), UpdateRoutesError<D, R>
         .filter(|s| !routes.contains(s))
         .collect();
 
-    info!(routes = ?routes_to_delete, "Deleting {} routes", routes_to_delete.len());
+    if routes_to_delete.len() > 0 {
+        info!(routes = ?routes_to_delete, "Deleting {} routes", routes_to_delete.len());
+    }
 
     // Delete inactive routes
     futures::future::try_join_all(
