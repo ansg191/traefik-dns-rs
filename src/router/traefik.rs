@@ -1,13 +1,11 @@
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest::{Client, IntoUrl, Url};
 use serde::Deserialize;
 use thiserror::Error;
 use crate::router::Route;
 
-lazy_static! {
-    static ref HOST_REGEX: Regex = Regex::new("Host\\(`(.+?)`\\)").unwrap();
-}
+static HOST_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new("Host\\(`(.+?)`\\)").unwrap());
 
 #[derive(Debug)]
 pub struct TraefikRouter {
