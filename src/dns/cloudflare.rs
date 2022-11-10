@@ -24,7 +24,10 @@ impl CloudflareProvider {
             creds,
             HttpApiClientConfig::default(),
             Environment::Production,
-        )?;
+        ).map_err(|e| match e.downcast::<reqwest::Error>() {
+            Ok(e) => CloudflareError::NewClientError(e),
+            Err(e) => panic!("Unexpected error: {}", e),
+        })?;
 
         Ok(Self {
             dest,
@@ -110,7 +113,7 @@ impl super::Provider for CloudflareProvider {
 #[derive(Debug, Error)]
 pub enum CloudflareError {
     #[error(transparent)]
-    NewClientError(#[from] anyhow::Error),
+    NewClientError(#[from] reqwest::Error),
     #[error(transparent)]
     ApiError(#[from] ApiFailure),
     #[error("record not found")]
