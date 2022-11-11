@@ -7,6 +7,7 @@ use crate::{
 mod dns;
 mod router;
 mod updater;
+mod rate_limit;
 
 const UPDATE_INTERVAL: Duration = Duration::from_secs(10);
 
