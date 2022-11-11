@@ -1,37 +1,37 @@
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::ops::Add;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::time::{Instant, sleep, sleep_until};
+use tokio::time::sleep;
 
 pub struct RateLimit {
+    // The number of requests that can be made in the time period.
     capacity: u64,
-    // Nano seconds of fixed window period
+    // Milliseconds of fixed window period.
     period: u64,
 
+    // Used requests in current window.
     used: AtomicU64,
-
-    start: u128,
-    // The next reset time measured in nanoseconds from start.
-    // By using a u64, we get a 584 year window before we overflow.
+    // The next reset time measured in milliseconds from UNIX_EPOCH.
     reset: AtomicU64,
 }
 
 impl RateLimit {
     pub fn new(num: u64, per: Duration) -> Self {
-        let start = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_nanos();
-
-        let period = per.as_nanos()
+        let period = per.as_millis()
             .try_into()
             .expect("Period is too long");
-        let reset = period;
+        let reset = SystemTime::now()
+            .add(per)
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_millis()
+            .try_into()
+            .expect("Period is too long");
 
         Self {
             capacity: num,
             period,
             used: AtomicU64::new(0),
-            start,
             reset: AtomicU64::new(reset),
         }
     }
@@ -45,10 +45,9 @@ impl RateLimit {
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("Time went backwards")
-                .as_nanos();
-            let elapsed = (now - self.start) as u64;
+                .as_millis() as u64;
 
-            if elapsed > self.reset.load(Ordering::Acquire) {
+            if now > self.reset.load(Ordering::Acquire) {
                 // The period has elapsed, reset the counter.
                 self.used.store(1, Ordering::Release);
                 self.reset.fetch_add(self.period, Ordering::Release);
@@ -66,8 +65,8 @@ impl RateLimit {
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("Time went backwards")
-                .as_nanos();
-            let wait_time = Duration::from_nanos((now - (self.start + reset as u128)) as u64);
+                .as_millis() as u64;
+            let wait_time = Duration::from_millis(reset - now);
 
             sleep(wait_time).await;
         }
