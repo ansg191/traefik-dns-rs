@@ -13,8 +13,8 @@ cf = ["cloudflare"]
 
 [dependencies]
 async-trait = "0.1.57"
-aws-config = { version = "0.49.0", optional = true }
-aws-sdk-route53 = { version = "0.19.0", optional = true }
+aws-config = { version = "0.51", optional = true }
+aws-sdk-route53 = { version = "0.21", optional = true }
 cloudflare = { version = "0.9.1", optional = true, default-features = false, features = ["rustls-tls"] }
 futures = "0.3.24"
 once_cell = "1.16.0"

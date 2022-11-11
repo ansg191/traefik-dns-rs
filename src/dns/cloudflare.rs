@@ -1,18 +1,27 @@
-use cloudflare::endpoints::dns::{CreateDnsRecord, CreateDnsRecordParams, DeleteDnsRecord, DnsContent, DnsRecord, ListDnsRecords, ListDnsRecordsParams};
-use cloudflare::framework::async_api::{ApiClient, Client};
-use cloudflare::framework::auth::Credentials;
-use cloudflare::framework::{Environment, HttpApiClientConfig};
-use cloudflare::framework::response::ApiFailure;
+use std::time::Duration;
+use cloudflare::{
+    endpoints::dns::{CreateDnsRecord, CreateDnsRecordParams, DeleteDnsRecord, DnsContent, DnsRecord, ListDnsRecords, ListDnsRecordsParams},
+    framework::{
+        auth::Credentials,
+        async_api::{ApiClient, Client},
+        Environment,
+        HttpApiClientConfig,
+        response::ApiFailure,
+    },
+};
 use thiserror::Error;
+use crate::rate_limit::RateLimit;
 
 const DEFAULT_TTL: u32 = 300;
 const DEFAULT_PROXIED: bool = false;
+const REQUEST_LIMIT: u64 = 1200;
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 pub struct CloudflareProvider {
     dest: String,
     zone_id: String,
 
-    client: Client,
+    client: WrappedCloudflareClient,
 
     ttl: u32,
     proxied: bool,
@@ -32,7 +41,7 @@ impl CloudflareProvider {
         Ok(Self {
             dest,
             zone_id,
-            client,
+            client: WrappedCloudflareClient::new(client),
             ttl: DEFAULT_TTL,
             proxied: DEFAULT_PROXIED,
         })
@@ -43,22 +52,6 @@ impl CloudflareProvider {
 
     pub fn proxied(&self) -> &bool { &self.proxied }
     pub fn proxied_mut(&mut self) -> &mut bool { &mut self.proxied }
-
-    async fn list_records(&self) -> Result<Vec<DnsRecord>, CloudflareError> {
-        let request = ListDnsRecords {
-            zone_identifier: &self.zone_id,
-            params: ListDnsRecordsParams {
-                record_type: Some(DnsContent::CNAME { content: self.dest.clone() }),
-                name: None,
-                page: None,
-                per_page: Some(5000),
-                order: None,
-                direction: None,
-                search_match: None,
-            },
-        };
-        Ok(self.client.request(&request).await?.result)
-    }
 }
 
 #[async_trait::async_trait]
@@ -70,43 +63,23 @@ impl super::Provider for CloudflareProvider {
 
     #[tracing::instrument(skip(self))]
     async fn list_records(&self) -> Result<Vec<String>, Self::Error> {
-        let records = self.list_records().await?;
+        let records = self.client.list_records(&self.zone_id, &self.dest).await?;
         Ok(records.into_iter().map(|r| r.name).collect())
     }
 
     #[tracing::instrument(skip(self))]
     async fn create_record(&self, host: &str) -> Result<(), Self::Error> {
-        let request = CreateDnsRecord {
-            zone_identifier: &self.zone_id,
-            params: CreateDnsRecordParams {
-                ttl: Some(self.ttl),
-                priority: None,
-                proxied: Some(self.proxied),
-                name: host,
-                content: DnsContent::CNAME {
-                    content: self.dest.clone()
-                },
-            },
-        };
-        self.client.request(&request).await?;
-
-        Ok(())
+        self.client.create_record(&self.zone_id, host, &self.dest, self.ttl, self.proxied).await
     }
 
     #[tracing::instrument(skip(self))]
     async fn delete_record(&self, host: &str) -> Result<(), Self::Error> {
-        let record = self.list_records().await?
+        let record = self.client.list_records(&self.zone_id, &self.dest).await?
             .into_iter()
             .find(|r| r.name == host);
 
         if let Some(record) = record {
-            let request = DeleteDnsRecord {
-                zone_identifier: &self.zone_id,
-                identifier: &record.id,
-            };
-            self.client.request(&request).await?;
-
-            Ok(())
+            self.client.delete_record(&self.zone_id, &record.id).await
         } else {
             Err(CloudflareError::RecordNotFound)
         }
@@ -121,4 +94,68 @@ pub enum CloudflareError {
     ApiError(#[from] ApiFailure),
     #[error("record not found")]
     RecordNotFound,
+}
+
+struct WrappedCloudflareClient {
+    client: Client,
+    limiter: RateLimit,
+}
+
+impl WrappedCloudflareClient {
+    fn new(client: Client) -> Self {
+        Self {
+            client,
+            limiter: RateLimit::new(REQUEST_LIMIT, REQUEST_TIMEOUT),
+        }
+    }
+
+    async fn list_records(&self, zone_id: &str, dest: &str) -> Result<Vec<DnsRecord>, CloudflareError> {
+        self.limiter.ready().await;
+
+        let request = ListDnsRecords {
+            zone_identifier: zone_id,
+            params: ListDnsRecordsParams {
+                record_type: Some(DnsContent::CNAME { content: dest.to_string() }),
+                name: None,
+                page: None,
+                per_page: Some(5000),
+                order: None,
+                direction: None,
+                search_match: None,
+            },
+        };
+        Ok(self.client.request(&request).await?.result)
+    }
+
+    async fn create_record(&self, zone_id: &str, host: &str, dest: &str, ttl: u32, proxied: bool) -> Result<(), CloudflareError> {
+        self.limiter.ready().await;
+
+        let request = CreateDnsRecord {
+            zone_identifier: zone_id,
+            params: CreateDnsRecordParams {
+                ttl: Some(ttl),
+                priority: None,
+                proxied: Some(proxied),
+                name: host,
+                content: DnsContent::CNAME {
+                    content: dest.to_string()
+                },
+            },
+        };
+        self.client.request(&request).await?;
+
+        Ok(())
+    }
+
+    async fn delete_record(&self, zone_id: &str, record_id: &str) -> Result<(), CloudflareError> {
+        self.limiter.ready().await;
+
+        let request = DeleteDnsRecord {
+            zone_identifier: zone_id,
+            identifier: record_id,
+        };
+        self.client.request(&request).await?;
+
+        Ok(())
+    }
 }
