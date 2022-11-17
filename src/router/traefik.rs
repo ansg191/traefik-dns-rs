@@ -6,7 +6,10 @@ use thiserror::Error;
 use tracing::debug;
 use crate::router::Route;
 
-static HOST_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new("Host\\(`(.+?)`\\)").unwrap());
+// https://regex101.com/r/eTXvjo/1
+static HOST_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new("Host\\((.+?)\\)").unwrap());
+// https://regex101.com/r/MZWk3s/1
+static HOST_ARG_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new("`(.+?)`").unwrap());
 
 #[derive(Debug)]
 pub struct TraefikRouter {
@@ -59,6 +62,8 @@ impl super::Router for TraefikRouter {
 /// Parses domains out of Traefik Rule expressions.
 fn parse_domains(rule: &str) -> impl Iterator<Item=&str> {
     HOST_REGEX.captures_iter(rule)
+        .filter_map(|cap| cap.get(1))
+        .flat_map(|m| HOST_ARG_REGEX.captures_iter(m.as_str()))
         .filter_map(|cap| cap.get(1))
         .map(|m| m.as_str())
 }
