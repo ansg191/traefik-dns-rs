@@ -20,7 +20,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cluster_domain = std::env::var("CLUSTER_DOMAIN")?;
 
     let cfg = aws_config::from_env().region("us-west-2").load().await;
-    let d = Route53Provider::new(&cfg, zone, cluster_domain);
+    let client = aws_sdk_route53::Client::new(&cfg);
+
+    let d = Route53Provider::new(client, zone, cluster_domain);
     let r = TraefikRouter::new(traefik_url)?;
 
     updater::Updater::new(d, r, UPDATE_INTERVAL)
