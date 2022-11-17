@@ -46,19 +46,21 @@ impl super::Router for TraefikRouter {
 
         Ok(routes.iter()
             .flat_map(|r| parse_domains(&r.rule)
-                .into_iter().map(|d| Route {
-                id: r.name.clone(),
-                host: d.to_owned(),
-            }))
-            .collect())
+                .map(|d| Route {
+                    id: r.name.clone(),
+                    host: d.to_owned(),
+                })
+            )
+            .collect()
+        )
     }
 }
 
 /// Parses domains out of Traefik Rule expressions.
-fn parse_domains(rule: &str) -> Vec<&str> {
+fn parse_domains(rule: &str) -> impl Iterator<Item=&str> {
     HOST_REGEX.captures_iter(rule)
-        .map(|cap| cap.get(1).unwrap().as_str())
-        .collect()
+        .filter_map(|cap| cap.get(1))
+        .map(|m| m.as_str())
 }
 
 #[derive(Debug, Error)]
