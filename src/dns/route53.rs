@@ -1,8 +1,10 @@
 use aws_config::SdkConfig;
-use aws_sdk_route53::Client;
-use aws_sdk_route53::error::{ChangeResourceRecordSetsError, ListResourceRecordSetsError};
-use aws_sdk_route53::model::{Change, ChangeAction, ChangeBatch, ResourceRecord, ResourceRecordSet, RrType};
-use aws_sdk_route53::types::SdkError;
+use aws_sdk_route53::{
+    error::{ChangeResourceRecordSetsError, ListResourceRecordSetsError},
+    Client,
+    model::{Change, ChangeAction, ChangeBatch, ResourceRecord, ResourceRecordSet, RrType},
+    types::SdkError,
+};
 use thiserror::Error;
 use super::Provider;
 
@@ -27,12 +29,8 @@ impl Route53Provider {
         }
     }
 
-    pub fn ttl(&self) -> &i64 {
-        &self.ttl
-    }
-    pub fn ttl_mut(&mut self) -> &mut i64 {
-        &mut self.ttl
-    }
+    pub fn ttl(&self) -> &i64 { &self.ttl }
+    pub fn ttl_mut(&mut self) -> &mut i64 { &mut self.ttl }
 
     fn change_batch(&self, action: ChangeAction, host: &str, ttl: Option<i64>) -> ChangeBatch {
         ChangeBatch::builder()
@@ -46,8 +44,7 @@ impl Route53Provider {
                         .build())
                     .ttl(ttl.unwrap_or(self.ttl))
                     .build())
-                .build()
-            )
+                .build())
             .build()
     }
 }
@@ -56,13 +53,8 @@ impl Route53Provider {
 impl Provider for Route53Provider {
     type Error = Route53Error;
 
-    fn destination(&self) -> &str {
-        &self.dest
-    }
-
-    fn destination_mut(&mut self) -> &mut String {
-        &mut self.dest
-    }
+    fn destination(&self) -> &str { &self.dest }
+    fn destination_mut(&mut self) -> &mut String { &mut self.dest }
 
     #[tracing::instrument(skip(self), level = "info")]
     async fn list_records(&self) -> Result<Vec<String>, Self::Error> {
@@ -70,20 +62,23 @@ impl Provider for Route53Provider {
             .hosted_zone_id(self.hosted_zone_id.clone())
             .send()
             .await?
-            .resource_record_sets()
+            .resource_record_sets
             .unwrap_or_default()
-            .iter()
+            .into_iter()
             .filter(|r| {
+                // Filter out records that don't match the destination & aren't CNAMEs
                 let dest = r.resource_records()
                     .unwrap_or_default()
                     .iter()
                     .find(|v| v.value() == Some(&self.dest));
                 r.r#type() == Some(&RrType::Cname) && dest.is_some()
             })
-            .filter_map(|r| r.name().map(ToOwned::to_owned))
+            .filter_map(|r| r.name)
             .map(|mut s| {
                 // Remove last dot
-                s.pop();
+                if s.ends_with('.') {
+                    s.pop();
+                }
                 s
             })
             .collect())
@@ -102,18 +97,23 @@ impl Provider for Route53Provider {
 
     #[tracing::instrument(skip(self), level = "info")]
     async fn delete_record(&self, host: &str) -> Result<(), Self::Error> {
-        let records = self.client.list_resource_record_sets()
+        let record = self.client.list_resource_record_sets()
             .hosted_zone_id(self.hosted_zone_id.clone())
             .send()
-            .await?;
-        let record = records
-            .resource_record_sets()
+            .await?
+            .resource_record_sets
             .unwrap_or_default()
-            .iter()
+            .into_iter()
             .find(|r| {
-                // Remove trailing dot
-                let name = r.name().map(|d| &d[..d.len() - 1]);
-                name == Some(host) && r.r#type() == Some(&RrType::Cname)
+                // Remove last dot & find matching record
+                let Some(name) = r.name() else { return false };
+                if name.ends_with('.') {
+                    let mut chars = name.chars();
+                    chars.next_back();
+                    chars.as_str() == host && r.r#type() == Some(&RrType::Cname)
+                } else {
+                    false
+                }
             })
             .ok_or(Route53Error::MissingRecord)?;
 
