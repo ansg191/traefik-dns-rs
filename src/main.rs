@@ -25,8 +25,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let d = Route53Provider::new(client, zone, cluster_domain);
     let r = TraefikRouter::new(traefik_url)?;
 
-    updater::Updater::new(d, r, UPDATE_INTERVAL)
-        .run()
+    updater::Updater::new(d, r)
+        .run(UPDATE_INTERVAL)
         .await?;
 
     Ok(())

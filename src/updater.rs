@@ -16,29 +16,26 @@ pub struct Updater<D: Provider, R: Router> {
     provider: D,
     router: R,
 
-    update_interval: Duration,
-
     current_routes: Mutex<HashSet<String>>,
 }
 
 impl<D: Provider, R: Router> Updater<D, R> {
-    pub fn new(provider: D, router: R, update_interval: Duration) -> Self {
+    pub fn new(provider: D, router: R) -> Self {
         Self {
             provider,
             router,
-            update_interval,
             current_routes: Mutex::new(HashSet::new()),
         }
     }
 
-    pub async fn run(&self) -> Result<(), UpdateRoutesError<D, R>> {
-        let mut interval = time::interval(self.update_interval);
+    pub async fn run(&self, update_interval: Duration) -> Result<(), UpdateRoutesError<D, R>> {
+        let mut interval = time::interval(update_interval);
         interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
         loop {
             interval.tick().await;
 
-            match time::timeout(self.update_interval, self.update_routes()).await {
+            match time::timeout(update_interval, self.update_routes()).await {
                 Ok(Ok(_)) => (),
                 Ok(Err(e)) => {
                     error!("route updating returned an error: {}", e);
@@ -152,7 +149,6 @@ mod tests {
         let updater = Updater::new(
             mock_provider,
             mock_router,
-            Duration::from_secs(1),
         );
 
         updater.update_routes().await.unwrap();
@@ -185,7 +181,6 @@ mod tests {
         let updater = Updater::new(
             mock_provider,
             mock_router,
-            Duration::from_secs(1),
         );
 
         updater.update_routes().await.unwrap();
@@ -229,7 +224,6 @@ mod tests {
         let updater = Updater::new(
             mock_provider,
             mock_router,
-            Duration::from_secs(1),
         );
 
         // Set updater current_routes to test1.example.com
