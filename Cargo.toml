@@ -33,3 +33,4 @@ aws-smithy-http = "0.51.0"
 aws-types = { version = "0.51.0", features = ["hardcoded-credentials"] }
 http = "0.2.8"
 httptest = "0.15.4"
+mockall = "0.11.3"
