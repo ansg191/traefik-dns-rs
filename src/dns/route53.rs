@@ -1,4 +1,3 @@
-use aws_config::SdkConfig;
 use aws_sdk_route53::{
     error::{ChangeResourceRecordSetsError, ListResourceRecordSetsError},
     Client,
@@ -20,11 +19,11 @@ pub struct Route53Provider {
 }
 
 impl Route53Provider {
-    pub fn new(config: &SdkConfig, hosted_zone_id: String, dest: String) -> Self {
+    pub fn new(client: Client, hosted_zone_id: String, dest: String) -> Self {
         Self {
             dest,
             hosted_zone_id,
-            client: Client::new(config),
+            client,
             ttl: DEFAULT_TTL,
         }
     }
@@ -135,4 +134,278 @@ pub enum Route53Error {
     ListSetsError(#[from] SdkError<ListResourceRecordSetsError>),
     #[error("missing record")]
     MissingRecord,
+}
+
+#[cfg(test)]
+mod tests {
+    use aws_smithy_client::test_connection::TestConnection;
+    use aws_smithy_http::body::SdkBody;
+    use crate::{
+        dns::Provider,
+        dns::route53::Route53Provider,
+    };
+
+    /// Generates a mock client from a list of requests/responses.
+    ///
+    /// # Arguments
+    ///
+    /// * `events`: Array of (expected request body, expected response body).
+    ///
+    /// returns: Client
+    fn mock_client(events: Vec<(String, String)>) -> aws_sdk_route53::Client {
+        let creds = aws_types::Credentials::from_keys(
+            "test",
+            "test",
+            Some("test".to_string()),
+        );
+
+        let cfg = aws_sdk_route53::Config::builder()
+            .credentials_provider(creds)
+            .region(aws_types::region::Region::new("us-east-1"))
+            .build();
+
+        let events = events.into_iter().map(|(req, res)| {
+            let req = http::Request::builder()
+                .body(SdkBody::from(req))
+                .unwrap();
+            let res = http::Response::builder()
+                .status(200)
+                .body(SdkBody::from(res))
+                .unwrap();
+            (req, res)
+        }).collect();
+
+        let conn = TestConnection::new(events);
+        let conn = aws_smithy_client::erase::DynConnector::new(conn);
+        aws_sdk_route53::Client::from_conf_conn(cfg, conn)
+    }
+
+    #[test]
+    fn test_ttl() {
+        let client = mock_client(vec![]);
+        let mut provider = Route53Provider::new(client, "".to_string(), "".to_string());
+
+        assert_eq!(provider.ttl(), &300);
+
+        *provider.ttl_mut() = 600;
+
+        assert_eq!(provider.ttl(), &600);
+    }
+
+    #[test]
+    fn test_destination() {
+        let client = mock_client(vec![]);
+        let mut provider = Route53Provider::new(client, "".to_string(), "dest".to_string());
+
+        assert_eq!(provider.destination(), "dest");
+
+        *provider.destination_mut() = "newdest".to_string();
+
+        assert_eq!(provider.destination(), "newdest");
+    }
+
+    #[tokio::test]
+    async fn test_list_records() {
+        let client = mock_client(vec![
+            (
+                r#"{"HostedZoneId": "hosted_zone_id", "MaxItems": "100"}"#.to_string(),
+                r#"<?xml version="1.0" encoding="UTF-8"?>
+                <ListResourceRecordSetsResponse>
+                    <ResourceRecordSets>
+                        <ResourceRecordSet>
+                            <Name>test1.example.com.</Name>
+                            <Type>CNAME</Type>
+                            <TTL>300</TTL>
+                            <ResourceRecords>
+                                <ResourceRecord>
+                                    <Value>dest</Value>
+                                </ResourceRecord>
+                            </ResourceRecords>
+                        </ResourceRecordSet>
+                        <ResourceRecordSet>
+                            <Name>test2.example.com.</Name>
+                            <Type>CNAME</Type>
+                            <TTL>300</TTL>
+                            <ResourceRecords>
+                                <ResourceRecord>
+                                    <Value>dest</Value>
+                                </ResourceRecord>
+                            </ResourceRecords>
+                        </ResourceRecordSet>
+                        <ResourceRecordSet>
+                            <Name>wrong-type.example.com.</Name>
+                            <Type>A</Type>
+                            <TTL>300</TTL>
+                            <ResourceRecords>
+                                <ResourceRecord>
+                                    <Value>dest</Value>
+                                </ResourceRecord>
+                            </ResourceRecords>
+                        </ResourceRecordSet>
+                        <ResourceRecordSet>
+                            <Name>wrong-dest.example.com.</Name>
+                            <Type>CNAME</Type>
+                            <TTL>300</TTL>
+                            <ResourceRecords>
+                                <ResourceRecord>
+                                    <Value>wrong.dest.com</Value>
+                                </ResourceRecord>
+                            </ResourceRecords>
+                        </ResourceRecordSet>
+                    </ResourceRecordsSets>
+                </ListResourceRecordSetsResponse>
+                "#.to_string(),
+            ),
+        ]);
+        let provider = Route53Provider::new(client, "hosted_zone_id".to_string(), "dest".to_string());
+
+        let records = provider.list_records().await.unwrap();
+
+        assert_eq!(records, vec![
+            "test1.example.com",
+            "test2.example.com",
+        ]);
+    }
+
+    #[tokio::test]
+    async fn test_create_record() {
+        let client = mock_client(vec![
+            (
+                r#"{
+                    "HostedZoneId": "hosted_zone_id",
+                    "ChangeBatch": {
+                        "Changes": [{
+                                "Action": "CREATE",
+                                "ResourceRecordSet": {
+                                    "Name": "test.example.com.",
+                                    "Type": "CNAME",
+                                    "TTL": 300,
+                                    "ResourceRecords": [
+                                        {"Value": "dest"}
+                                    ]
+                                }
+                        }]
+                    }
+                }"#.to_string(),
+                r#"<?xml version="1.0" encoding="UTF-8"?>
+                <ChangeResourceRecordSetsResponse>
+                    <ChangeInfo>
+                        <Id>change_id</Id>
+                    </ChangeInfo>
+                </ChangeResourceRecordSetsResponse>
+                "#.to_string(),
+            ),
+        ]);
+        let provider = Route53Provider::new(client, "hosted_zone_id".to_string(), "dest".to_string());
+
+        provider.create_record("test.example.com").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_delete_record() {
+        let client = mock_client(vec![
+            (
+                r#"{"HostedZoneId": "hosted_zone_id", "MaxItems": "100"}"#.to_string(),
+                r#"<?xml version="1.0" encoding="UTF-8"?>
+                <ListResourceRecordSetsResponse>
+                    <ResourceRecordSets>
+                        <ResourceRecordSet>
+                            <Name>test.example.com.</Name>
+                            <Type>CNAME</Type>
+                            <TTL>300</TTL>
+                            <ResourceRecords>
+                                <ResourceRecord>
+                                    <Value>dest</Value>
+                                </ResourceRecord>
+                            </ResourceRecords>
+                        </ResourceRecordSet>
+                    </ResourceRecordsSets>
+                </ListResourceRecordSetsResponse>
+                "#.to_string()
+            ),
+            (
+                r#"{
+                    "HostedZoneId": "hosted_zone_id",
+                    "ChangeBatch": {
+                        "Changes": [{
+                                "Action": "DELETE",
+                                "ResourceRecordSet": {
+                                    "Name": "test.example.com.",
+                                    "Type": "CNAME",
+                                    "TTL": 300,
+                                    "ResourceRecords": [
+                                        {"Value": "dest"}
+                                    ]
+                                }
+                        }]
+                    }
+                }"#.to_string(),
+                r#"<?xml version="1.0" encoding="UTF-8"?>
+                <ChangeResourceRecordSetsResponse>
+                    <ChangeInfo>
+                        <Id>change_id</Id>
+                    </ChangeInfo>
+                </ChangeResourceRecordSetsResponse>
+                "#.to_string(),
+            ),
+        ]);
+        let provider = Route53Provider::new(client, "hosted_zone_id".to_string(), "dest".to_string());
+
+        provider.delete_record("test.example.com").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_delete_record_missing() {
+        let client = mock_client(vec![
+            (
+                r#"{"HostedZoneId": "hosted_zone_id", "MaxItems": "100"}"#.to_string(),
+                r#"<?xml version="1.0" encoding="UTF-8"?>
+                <ListResourceRecordSetsResponse>
+                    <ResourceRecordSets>
+                        <ResourceRecordSet>
+                            <Name>test.example.com.</Name>
+                            <Type>CNAME</Type>
+                            <TTL>300</TTL>
+                            <ResourceRecords>
+                                <ResourceRecord>
+                                    <Value>dest</Value>
+                                </ResourceRecord>
+                            </ResourceRecords>
+                        </ResourceRecordSet>
+                    </ResourceRecordsSets>
+                </ListResourceRecordSetsResponse>
+                "#.to_string()
+            ),
+            (
+                r#"{
+                    "HostedZoneId": "hosted_zone_id",
+                    "ChangeBatch": {
+                        "Changes": [{
+                                "Action": "DELETE",
+                                "ResourceRecordSet": {
+                                    "Name": "missing.example.com.",
+                                    "Type": "CNAME",
+                                    "TTL": 300,
+                                    "ResourceRecords": [
+                                        {"Value": "dest"}
+                                    ]
+                                }
+                        }]
+                    }
+                }"#.to_string(),
+                r#"<?xml version="1.0" encoding="UTF-8"?>
+                <ChangeResourceRecordSetsResponse>
+                    <ChangeInfo>
+                        <Id>change_id</Id>
+                    </ChangeInfo>
+                </ChangeResourceRecordSetsResponse>
+                "#.to_string(),
+            ),
+        ]);
+        let provider = Route53Provider::new(client, "hosted_zone_id".to_string(), "dest".to_string());
+
+        let err = provider.delete_record("missing.example.com").await.unwrap_err();
+
+        assert!(matches!(err, super::Route53Error::MissingRecord));
+    }
 }
