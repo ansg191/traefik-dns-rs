@@ -75,7 +75,7 @@ impl<D: Provider, R: Router> Updater<D, R> {
             .filter(|s| !routes.contains(s))
             .collect();
 
-        if routes_to_delete.len() > 0 {
+        if !routes_to_delete.is_empty() {
             info!(routes = ?routes_to_delete, "Deleting {} routes", routes_to_delete.len());
         }
 
