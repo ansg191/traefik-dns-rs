@@ -4,12 +4,18 @@ use serde::Deserialize;
 #[cfg(feature = "aws")]
 #[derive(Debug, Deserialize)]
 pub struct Route53Settings {
+    pub zone_id: String,
+    pub destination: String,
+
     pub ttl: Option<i64>,
 }
 
 #[cfg(feature = "cf")]
 #[derive(Debug, Deserialize)]
 pub struct CloudflareSettings {
+    pub zone_id: String,
+    pub destination: String,
+
     pub token: Option<String>,
     pub email: Option<String>,
     pub api_key: Option<String>,
@@ -29,9 +35,7 @@ pub enum Provider {
 
 #[derive(Debug, Deserialize)]
 pub struct Settings {
-    pub zone_id: String,
     pub traefik_url: String,
-    pub destination: String,
     pub update_interval: String,
     pub provider: Provider,
 }
