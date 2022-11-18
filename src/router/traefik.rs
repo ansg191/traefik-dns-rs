@@ -1,10 +1,10 @@
+use crate::router::Route;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest::{Client, IntoUrl, Url};
 use serde::Deserialize;
 use thiserror::Error;
 use tracing::debug;
-use crate::router::Route;
 
 // https://regex101.com/r/eTXvjo/1
 static HOST_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new("Host\\((.+?)\\)").unwrap());
@@ -39,7 +39,9 @@ impl super::Router for TraefikRouter {
     #[tracing::instrument(skip(self))]
     async fn get_routes(&self) -> Result<Vec<Route>, Self::Error> {
         let url = self.base_url.join("api/http/routers")?;
-        let routes = self.client.get(url)
+        let routes = self
+            .client
+            .get(url)
             .send()
             .await?
             .json::<Vec<TraefikRoute>>()
@@ -47,21 +49,22 @@ impl super::Router for TraefikRouter {
 
         debug!(?routes, "got {} routes from Traefik", routes.len());
 
-        Ok(routes.iter()
-            .flat_map(|r| parse_domains(&r.rule)
-                .map(|d| Route {
+        Ok(routes
+            .iter()
+            .flat_map(|r| {
+                parse_domains(&r.rule).map(|d| Route {
                     id: r.name.clone(),
                     host: d.to_owned(),
                 })
-            )
-            .collect()
-        )
+            })
+            .collect())
     }
 }
 
 /// Parses domains out of Traefik Rule expressions.
-fn parse_domains(rule: &str) -> impl Iterator<Item=&str> {
-    HOST_REGEX.captures_iter(rule)
+fn parse_domains(rule: &str) -> impl Iterator<Item = &str> {
+    HOST_REGEX
+        .captures_iter(rule)
         .filter_map(|cap| cap.get(1))
         .flat_map(|m| HOST_ARG_REGEX.captures_iter(m.as_str()))
         .filter_map(|cap| cap.get(1))
@@ -86,9 +89,9 @@ struct TraefikRoute {
 
 #[cfg(test)]
 mod tests {
-    use httptest::{Expectation, Server, matchers::*, responders::*};
-    use crate::router::Router;
     use super::*;
+    use crate::router::Router;
+    use httptest::{matchers::*, responders::*, Expectation, Server};
 
     #[test]
     fn test_parse_domains() {
@@ -98,10 +101,12 @@ mod tests {
         let domains: Vec<&str> = parse_domains("Host(`example1.com`, `example2.org`)").collect();
         assert_eq!(domains, vec!["example1.com", "example2.org"]);
 
-        let domains: Vec<&str> = parse_domains("Host(`example1.com`), Host(`example2.org`)").collect();
+        let domains: Vec<&str> =
+            parse_domains("Host(`example1.com`), Host(`example2.org`)").collect();
         assert_eq!(domains, vec!["example1.com", "example2.org"]);
 
-        let domains: Vec<&str> = parse_domains("Host(`example1.com`) || Host(`example2.org`) && Path(`/foo`)").collect();
+        let domains: Vec<&str> =
+            parse_domains("Host(`example1.com`) || Host(`example2.org`) && Path(`/foo`)").collect();
         assert_eq!(domains, vec!["example1.com", "example2.org"]);
 
         let domains: Vec<&str> = parse_domains("HostSNI(*)").collect();
@@ -114,8 +119,8 @@ mod tests {
         let base_url = server.url_str("/");
 
         server.expect(
-            Expectation::matching(request::method_path("GET", "/api/http/routers"))
-                .respond_with(status_code(200).body(
+            Expectation::matching(request::method_path("GET", "/api/http/routers")).respond_with(
+                status_code(200).body(
                     r#"
                     [
                         {
@@ -135,18 +140,34 @@ mod tests {
                             "name": "path"
                         }
                     ]
-                    "#
-                ))
+                    "#,
+                ),
+            ),
         );
 
         let router = TraefikRouter::new(base_url).unwrap();
 
         let routes = router.get_routes().await.unwrap();
-        assert_eq!(routes, vec![
-            Route { id: "example1".to_owned(), host: "example1.com".to_owned() },
-            Route { id: "example2".to_owned(), host: "example2.org".to_owned() },
-            Route { id: "example3".to_owned(), host: "example3.net".to_owned() },
-            Route { id: "example3".to_owned(), host: "example4.net".to_owned() },
-        ]);
+        assert_eq!(
+            routes,
+            vec![
+                Route {
+                    id: "example1".to_owned(),
+                    host: "example1.com".to_owned()
+                },
+                Route {
+                    id: "example2".to_owned(),
+                    host: "example2.org".to_owned()
+                },
+                Route {
+                    id: "example3".to_owned(),
+                    host: "example3.net".to_owned()
+                },
+                Route {
+                    id: "example3".to_owned(),
+                    host: "example4.net".to_owned()
+                },
+            ]
+        );
     }
 }

@@ -1,8 +1,11 @@
-use cloudflare::endpoints::dns::{CreateDnsRecord, CreateDnsRecordParams, DeleteDnsRecord, DnsContent, DnsRecord, ListDnsRecords, ListDnsRecordsParams};
+use cloudflare::endpoints::dns::{
+    CreateDnsRecord, CreateDnsRecordParams, DeleteDnsRecord, DnsContent, DnsRecord, ListDnsRecords,
+    ListDnsRecordsParams,
+};
 use cloudflare::framework::async_api::{ApiClient, Client};
 use cloudflare::framework::auth::Credentials;
-use cloudflare::framework::{Environment, HttpApiClientConfig};
 use cloudflare::framework::response::ApiFailure;
+use cloudflare::framework::{Environment, HttpApiClientConfig};
 use thiserror::Error;
 
 const DEFAULT_TTL: u32 = 300;
@@ -24,7 +27,8 @@ impl CloudflareProvider {
             creds,
             HttpApiClientConfig::default(),
             Environment::Production,
-        ).map_err(|e| match e.downcast::<reqwest::Error>() {
+        )
+        .map_err(|e| match e.downcast::<reqwest::Error>() {
             Ok(e) => CloudflareError::NewClientError(e),
             Err(e) => panic!("Unexpected error: {}", e),
         })?;
@@ -38,17 +42,27 @@ impl CloudflareProvider {
         })
     }
 
-    pub fn ttl(&self) -> &u32 { &self.ttl }
-    pub fn ttl_mut(&mut self) -> &mut u32 { &mut self.ttl }
+    pub fn ttl(&self) -> &u32 {
+        &self.ttl
+    }
+    pub fn ttl_mut(&mut self) -> &mut u32 {
+        &mut self.ttl
+    }
 
-    pub fn proxied(&self) -> &bool { &self.proxied }
-    pub fn proxied_mut(&mut self) -> &mut bool { &mut self.proxied }
+    pub fn proxied(&self) -> &bool {
+        &self.proxied
+    }
+    pub fn proxied_mut(&mut self) -> &mut bool {
+        &mut self.proxied
+    }
 
     async fn list_records(&self) -> Result<Vec<DnsRecord>, CloudflareError> {
         let request = ListDnsRecords {
             zone_identifier: &self.zone_id,
             params: ListDnsRecordsParams {
-                record_type: Some(DnsContent::CNAME { content: self.dest.clone() }),
+                record_type: Some(DnsContent::CNAME {
+                    content: self.dest.clone(),
+                }),
                 name: None,
                 page: None,
                 per_page: Some(5000),
@@ -65,8 +79,12 @@ impl CloudflareProvider {
 impl super::Provider for CloudflareProvider {
     type Error = CloudflareError;
 
-    fn destination(&self) -> &str { &self.dest }
-    fn destination_mut(&mut self) -> &mut String { &mut self.dest }
+    fn destination(&self) -> &str {
+        &self.dest
+    }
+    fn destination_mut(&mut self) -> &mut String {
+        &mut self.dest
+    }
 
     #[tracing::instrument(skip(self))]
     async fn list_records(&self) -> Result<Vec<String>, Self::Error> {
@@ -84,7 +102,7 @@ impl super::Provider for CloudflareProvider {
                 proxied: Some(self.proxied),
                 name: host,
                 content: DnsContent::CNAME {
-                    content: self.dest.clone()
+                    content: self.dest.clone(),
                 },
             },
         };
@@ -95,7 +113,9 @@ impl super::Provider for CloudflareProvider {
 
     #[tracing::instrument(skip(self))]
     async fn delete_record(&self, host: &str) -> Result<(), Self::Error> {
-        let record = self.list_records().await?
+        let record = self
+            .list_records()
+            .await?
             .into_iter()
             .find(|r| r.name == host);
 

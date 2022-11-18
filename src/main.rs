@@ -1,10 +1,7 @@
 #![allow(dead_code)]
 
+use crate::{dns::route53::Route53Provider, router::traefik::TraefikRouter};
 use std::time::Duration;
-use crate::{
-    dns::route53::Route53Provider,
-    router::traefik::TraefikRouter,
-};
 
 mod dns;
 mod router;
@@ -27,9 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let d = Route53Provider::new(client, zone, cluster_domain);
     let r = TraefikRouter::new(traefik_url)?;
 
-    updater::Updater::new(d, r)
-        .run(UPDATE_INTERVAL)
-        .await?;
+    updater::Updater::new(d, r).run(UPDATE_INTERVAL).await?;
 
     Ok(())
 }

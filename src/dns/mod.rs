@@ -1,7 +1,7 @@
-#[cfg(feature = "aws")]
-pub mod route53;
 #[cfg(feature = "cloudflare")]
 pub mod cloudflare;
+#[cfg(feature = "aws")]
+pub mod route53;
 
 #[cfg_attr(test, mockall::automock(type Error = tests::MockProviderError;))]
 #[async_trait::async_trait]

@@ -1,11 +1,11 @@
+use super::Provider;
 use aws_sdk_route53::{
     error::{ChangeResourceRecordSetsError, ListResourceRecordSetsError},
-    Client,
     model::{Change, ChangeAction, ChangeBatch, ResourceRecord, ResourceRecordSet, RrType},
     types::SdkError,
+    Client,
 };
 use thiserror::Error;
-use super::Provider;
 
 const DEFAULT_TTL: i64 = 300;
 
@@ -28,22 +28,30 @@ impl Route53Provider {
         }
     }
 
-    pub fn ttl(&self) -> &i64 { &self.ttl }
-    pub fn ttl_mut(&mut self) -> &mut i64 { &mut self.ttl }
+    pub fn ttl(&self) -> &i64 {
+        &self.ttl
+    }
+    pub fn ttl_mut(&mut self) -> &mut i64 {
+        &mut self.ttl
+    }
 
     fn change_batch(&self, action: ChangeAction, host: &str, ttl: Option<i64>) -> ChangeBatch {
         ChangeBatch::builder()
-            .changes(Change::builder()
-                .action(action)
-                .resource_record_set(ResourceRecordSet::builder()
-                    .name(host)
-                    .r#type(RrType::Cname)
-                    .resource_records(ResourceRecord::builder()
-                        .value(self.dest.clone())
-                        .build())
-                    .ttl(ttl.unwrap_or(self.ttl))
-                    .build())
-                .build())
+            .changes(
+                Change::builder()
+                    .action(action)
+                    .resource_record_set(
+                        ResourceRecordSet::builder()
+                            .name(host)
+                            .r#type(RrType::Cname)
+                            .resource_records(
+                                ResourceRecord::builder().value(self.dest.clone()).build(),
+                            )
+                            .ttl(ttl.unwrap_or(self.ttl))
+                            .build(),
+                    )
+                    .build(),
+            )
             .build()
     }
 }
@@ -52,12 +60,18 @@ impl Route53Provider {
 impl Provider for Route53Provider {
     type Error = Route53Error;
 
-    fn destination(&self) -> &str { &self.dest }
-    fn destination_mut(&mut self) -> &mut String { &mut self.dest }
+    fn destination(&self) -> &str {
+        &self.dest
+    }
+    fn destination_mut(&mut self) -> &mut String {
+        &mut self.dest
+    }
 
     #[tracing::instrument(skip(self), level = "info")]
     async fn list_records(&self) -> Result<Vec<String>, Self::Error> {
-        Ok(self.client.list_resource_record_sets()
+        Ok(self
+            .client
+            .list_resource_record_sets()
             .hosted_zone_id(self.hosted_zone_id.clone())
             .send()
             .await?
@@ -66,7 +80,8 @@ impl Provider for Route53Provider {
             .into_iter()
             .filter(|r| {
                 // Filter out records that don't match the destination & aren't CNAMEs
-                let dest = r.resource_records()
+                let dest = r
+                    .resource_records()
                     .unwrap_or_default()
                     .iter()
                     .find(|v| v.value() == Some(&self.dest));
@@ -85,7 +100,8 @@ impl Provider for Route53Provider {
 
     #[tracing::instrument(skip(self), level = "debug")]
     async fn create_record(&self, host: &str) -> Result<(), Self::Error> {
-        self.client.change_resource_record_sets()
+        self.client
+            .change_resource_record_sets()
             .hosted_zone_id(self.hosted_zone_id.clone())
             .change_batch(self.change_batch(ChangeAction::Upsert, host, None))
             .send()
@@ -96,7 +112,9 @@ impl Provider for Route53Provider {
 
     #[tracing::instrument(skip(self), level = "info")]
     async fn delete_record(&self, host: &str) -> Result<(), Self::Error> {
-        let record = self.client.list_resource_record_sets()
+        let record = self
+            .client
+            .list_resource_record_sets()
             .hosted_zone_id(self.hosted_zone_id.clone())
             .send()
             .await?
@@ -116,7 +134,8 @@ impl Provider for Route53Provider {
             })
             .ok_or(Route53Error::MissingRecord)?;
 
-        self.client.change_resource_record_sets()
+        self.client
+            .change_resource_record_sets()
             .hosted_zone_id(self.hosted_zone_id.clone())
             .change_batch(self.change_batch(ChangeAction::Delete, host, record.ttl()))
             .send()
@@ -138,12 +157,9 @@ pub enum Route53Error {
 
 #[cfg(test)]
 mod tests {
+    use crate::{dns::route53::Route53Provider, dns::Provider};
     use aws_smithy_client::test_connection::TestConnection;
     use aws_smithy_http::body::SdkBody;
-    use crate::{
-        dns::Provider,
-        dns::route53::Route53Provider,
-    };
 
     /// Generates a mock client from a list of requests/responses.
     ///
@@ -153,27 +169,24 @@ mod tests {
     ///
     /// returns: Client
     fn mock_client(events: Vec<(String, String)>) -> aws_sdk_route53::Client {
-        let creds = aws_types::Credentials::from_keys(
-            "test",
-            "test",
-            Some("test".to_string()),
-        );
+        let creds = aws_types::Credentials::from_keys("test", "test", Some("test".to_string()));
 
         let cfg = aws_sdk_route53::Config::builder()
             .credentials_provider(creds)
             .region(aws_types::region::Region::new("us-east-1"))
             .build();
 
-        let events = events.into_iter().map(|(req, res)| {
-            let req = http::Request::builder()
-                .body(SdkBody::from(req))
-                .unwrap();
-            let res = http::Response::builder()
-                .status(200)
-                .body(SdkBody::from(res))
-                .unwrap();
-            (req, res)
-        }).collect();
+        let events = events
+            .into_iter()
+            .map(|(req, res)| {
+                let req = http::Request::builder().body(SdkBody::from(req)).unwrap();
+                let res = http::Response::builder()
+                    .status(200)
+                    .body(SdkBody::from(res))
+                    .unwrap();
+                (req, res)
+            })
+            .collect();
 
         let conn = TestConnection::new(events);
         let conn = aws_smithy_client::erase::DynConnector::new(conn);
@@ -206,10 +219,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_records() {
-        let client = mock_client(vec![
-            (
-                r#"{"HostedZoneId": "hosted_zone_id", "MaxItems": "100"}"#.to_string(),
-                r#"<?xml version="1.0" encoding="UTF-8"?>
+        let client = mock_client(vec![(
+            r#"{"HostedZoneId": "hosted_zone_id", "MaxItems": "100"}"#.to_string(),
+            r#"<?xml version="1.0" encoding="UTF-8"?>
                 <ListResourceRecordSetsResponse>
                     <ResourceRecordSets>
                         <ResourceRecordSet>
@@ -254,24 +266,21 @@ mod tests {
                         </ResourceRecordSet>
                     </ResourceRecordsSets>
                 </ListResourceRecordSetsResponse>
-                "#.to_string(),
-            ),
-        ]);
-        let provider = Route53Provider::new(client, "hosted_zone_id".to_string(), "dest".to_string());
+                "#
+            .to_string(),
+        )]);
+        let provider =
+            Route53Provider::new(client, "hosted_zone_id".to_string(), "dest".to_string());
 
         let records = provider.list_records().await.unwrap();
 
-        assert_eq!(records, vec![
-            "test1.example.com",
-            "test2.example.com",
-        ]);
+        assert_eq!(records, vec!["test1.example.com", "test2.example.com",]);
     }
 
     #[tokio::test]
     async fn test_create_record() {
-        let client = mock_client(vec![
-            (
-                r#"{
+        let client = mock_client(vec![(
+            r#"{
                     "HostedZoneId": "hosted_zone_id",
                     "ChangeBatch": {
                         "Changes": [{
@@ -286,17 +295,19 @@ mod tests {
                                 }
                         }]
                     }
-                }"#.to_string(),
-                r#"<?xml version="1.0" encoding="UTF-8"?>
+                }"#
+            .to_string(),
+            r#"<?xml version="1.0" encoding="UTF-8"?>
                 <ChangeResourceRecordSetsResponse>
                     <ChangeInfo>
                         <Id>change_id</Id>
                     </ChangeInfo>
                 </ChangeResourceRecordSetsResponse>
-                "#.to_string(),
-            ),
-        ]);
-        let provider = Route53Provider::new(client, "hosted_zone_id".to_string(), "dest".to_string());
+                "#
+            .to_string(),
+        )]);
+        let provider =
+            Route53Provider::new(client, "hosted_zone_id".to_string(), "dest".to_string());
 
         provider.create_record("test.example.com").await.unwrap();
     }
@@ -321,7 +332,8 @@ mod tests {
                         </ResourceRecordSet>
                     </ResourceRecordsSets>
                 </ListResourceRecordSetsResponse>
-                "#.to_string()
+                "#
+                .to_string(),
             ),
             (
                 r#"{
@@ -339,17 +351,20 @@ mod tests {
                                 }
                         }]
                     }
-                }"#.to_string(),
+                }"#
+                .to_string(),
                 r#"<?xml version="1.0" encoding="UTF-8"?>
                 <ChangeResourceRecordSetsResponse>
                     <ChangeInfo>
                         <Id>change_id</Id>
                     </ChangeInfo>
                 </ChangeResourceRecordSetsResponse>
-                "#.to_string(),
+                "#
+                .to_string(),
             ),
         ]);
-        let provider = Route53Provider::new(client, "hosted_zone_id".to_string(), "dest".to_string());
+        let provider =
+            Route53Provider::new(client, "hosted_zone_id".to_string(), "dest".to_string());
 
         provider.delete_record("test.example.com").await.unwrap();
     }
@@ -374,7 +389,8 @@ mod tests {
                         </ResourceRecordSet>
                     </ResourceRecordsSets>
                 </ListResourceRecordSetsResponse>
-                "#.to_string()
+                "#
+                .to_string(),
             ),
             (
                 r#"{
@@ -392,19 +408,25 @@ mod tests {
                                 }
                         }]
                     }
-                }"#.to_string(),
+                }"#
+                .to_string(),
                 r#"<?xml version="1.0" encoding="UTF-8"?>
                 <ChangeResourceRecordSetsResponse>
                     <ChangeInfo>
                         <Id>change_id</Id>
                     </ChangeInfo>
                 </ChangeResourceRecordSetsResponse>
-                "#.to_string(),
+                "#
+                .to_string(),
             ),
         ]);
-        let provider = Route53Provider::new(client, "hosted_zone_id".to_string(), "dest".to_string());
+        let provider =
+            Route53Provider::new(client, "hosted_zone_id".to_string(), "dest".to_string());
 
-        let err = provider.delete_record("missing.example.com").await.unwrap_err();
+        let err = provider
+            .delete_record("missing.example.com")
+            .await
+            .unwrap_err();
 
         assert!(matches!(err, super::Route53Error::MissingRecord));
     }

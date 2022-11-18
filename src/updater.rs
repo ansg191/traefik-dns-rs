@@ -1,15 +1,12 @@
+use crate::{dns::Provider, router::Router};
 use std::{
-    fmt::{Debug, Display, Formatter},
     collections::HashSet,
+    fmt::{Debug, Display, Formatter},
     time::Duration,
 };
-use tokio::{time, time::MissedTickBehavior};
 use tokio::sync::Mutex;
+use tokio::{time, time::MissedTickBehavior};
 use tracing::{error, info};
-use crate::{
-    dns::Provider,
-    router::Router,
-};
 
 #[derive(Debug)]
 pub struct Updater<D: Provider, R: Router> {
@@ -52,7 +49,9 @@ impl<D: Provider, R: Router> Updater<D, R> {
         info!("updating routes");
         let mut current_routes = self.current_routes.lock().await;
 
-        let routes: HashSet<_> = self.router.get_routes()
+        let routes: HashSet<_> = self
+            .router
+            .get_routes()
             .await
             .map_err(UpdateRoutesError::<D, R>::RouterError)?
             .into_iter()
@@ -61,14 +60,18 @@ impl<D: Provider, R: Router> Updater<D, R> {
 
         // Add all active routes
         futures::future::try_join_all(
-            routes.iter()
+            routes
+                .iter()
                 .filter(|&domain| !current_routes.contains(domain))
-                .map(|domain| self.provider.create_record(domain))
-        ).await
-            .map_err(UpdateRoutesError::<D, R>::ProviderError)?;
+                .map(|domain| self.provider.create_record(domain)),
+        )
+        .await
+        .map_err(UpdateRoutesError::<D, R>::ProviderError)?;
 
         // Get routes to delete
-        let routes_to_delete: Vec<_> = self.provider.list_records()
+        let routes_to_delete: Vec<_> = self
+            .provider
+            .list_records()
             .await
             .map_err(UpdateRoutesError::<D, R>::ProviderError)?
             .into_iter()
@@ -81,9 +84,12 @@ impl<D: Provider, R: Router> Updater<D, R> {
 
         // Delete inactive routes
         futures::future::try_join_all(
-            routes_to_delete.iter().map(|domain| self.provider.delete_record(domain))
-        ).await
-            .map_err(UpdateRoutesError::<D, R>::ProviderError)?;
+            routes_to_delete
+                .iter()
+                .map(|domain| self.provider.delete_record(domain)),
+        )
+        .await
+        .map_err(UpdateRoutesError::<D, R>::ProviderError)?;
 
         // Update current routes
         *current_routes = routes;
@@ -102,7 +108,7 @@ impl<D: Provider, R: Router> Display for UpdateRoutesError<D, R> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             UpdateRoutesError::RouterError(e) => Display::fmt(e, f),
-            UpdateRoutesError::ProviderError(e) => Display::fmt(e, f)
+            UpdateRoutesError::ProviderError(e) => Display::fmt(e, f),
         }
     }
 }
@@ -111,45 +117,36 @@ impl<D: Provider + Debug, R: Router + Debug> std::error::Error for UpdateRoutesE
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::{
         dns::MockProvider,
-        router::{
-            MockRouter,
-            Route,
-        },
+        router::{MockRouter, Route},
     };
-    use super::*;
 
     #[tokio::test]
     async fn test_update_routes_simple() {
         let mut mock_router = MockRouter::new();
         let mut mock_provider = MockProvider::new();
 
-        mock_router.expect_get_routes()
-            .once()
-            .returning(|| {
-                Ok(vec![
-                    Route {
-                        host: "test1.example.com".to_string(),
-                        id: "test1".to_string(),
-                    }
-                ])
-            });
+        mock_router.expect_get_routes().once().returning(|| {
+            Ok(vec![Route {
+                host: "test1.example.com".to_string(),
+                id: "test1".to_string(),
+            }])
+        });
 
-        mock_provider.expect_create_record()
+        mock_provider
+            .expect_create_record()
             .with(mockall::predicate::eq("test1.example.com"))
             .once()
             .returning(|_| Ok(()));
 
-        mock_provider.expect_list_records()
+        mock_provider
+            .expect_list_records()
             .once()
             .returning(|| Ok(vec!["test1.example.com".to_string()]));
 
-
-        let updater = Updater::new(
-            mock_provider,
-            mock_router,
-        );
+        let updater = Updater::new(mock_provider, mock_router);
 
         updater.update_routes().await.unwrap();
 
@@ -163,25 +160,23 @@ mod tests {
         let mut mock_router = MockRouter::new();
         let mut mock_provider = MockProvider::new();
 
-        mock_router.expect_get_routes()
+        mock_router
+            .expect_get_routes()
             .once()
-            .returning(|| {
-                Ok(vec![])
-            });
+            .returning(|| Ok(vec![]));
 
-        mock_provider.expect_list_records()
+        mock_provider
+            .expect_list_records()
             .once()
             .returning(|| Ok(vec!["test1.example.com".to_string()]));
 
-        mock_provider.expect_delete_record()
+        mock_provider
+            .expect_delete_record()
             .with(mockall::predicate::eq("test1.example.com"))
             .once()
             .returning(|_| Ok(()));
 
-        let updater = Updater::new(
-            mock_provider,
-            mock_router,
-        );
+        let updater = Updater::new(mock_provider, mock_router);
 
         updater.update_routes().await.unwrap();
 
@@ -194,37 +189,33 @@ mod tests {
         let mut mock_router = MockRouter::new();
         let mut mock_provider = MockProvider::new();
 
-        mock_router.expect_get_routes()
-            .once()
-            .returning(|| {
-                Ok(vec![
-                    Route {
-                        host: "test1.example.com".to_string(),
-                        id: "test1".to_string(),
-                    },
-                    Route {
-                        host: "test2.example.com".to_string(),
-                        id: "test2".to_string(),
-                    },
-                ])
-            });
+        mock_router.expect_get_routes().once().returning(|| {
+            Ok(vec![
+                Route {
+                    host: "test1.example.com".to_string(),
+                    id: "test1".to_string(),
+                },
+                Route {
+                    host: "test2.example.com".to_string(),
+                    id: "test2".to_string(),
+                },
+            ])
+        });
 
-        mock_provider.expect_create_record()
+        mock_provider
+            .expect_create_record()
             .with(mockall::predicate::eq("test2.example.com"))
             .once()
             .returning(|_| Ok(()));
 
-        mock_provider.expect_list_records()
-            .once()
-            .returning(|| Ok(vec![
+        mock_provider.expect_list_records().once().returning(|| {
+            Ok(vec![
                 "test1.example.com".to_string(),
                 "test2.example.com".to_string(),
-            ]));
+            ])
+        });
 
-        let updater = Updater::new(
-            mock_provider,
-            mock_router,
-        );
+        let updater = Updater::new(mock_provider, mock_router);
 
         // Set updater current_routes to test1.example.com
         {
