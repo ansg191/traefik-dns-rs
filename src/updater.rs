@@ -98,10 +98,18 @@ impl<D: Provider, R: Router> Updater<D, R> {
     }
 }
 
-#[derive(Debug)]
 pub enum UpdateRoutesError<D: Provider, R: Router> {
     RouterError(R::Error),
     ProviderError(D::Error),
+}
+
+impl<D: Provider, R: Router> Debug for UpdateRoutesError<D, R> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UpdateRoutesError::RouterError(e) => Debug::fmt(e, f),
+            UpdateRoutesError::ProviderError(e) => Debug::fmt(e, f),
+        }
+    }
 }
 
 impl<D: Provider, R: Router> Display for UpdateRoutesError<D, R> {
@@ -113,7 +121,7 @@ impl<D: Provider, R: Router> Display for UpdateRoutesError<D, R> {
     }
 }
 
-impl<D: Provider + Debug, R: Router + Debug> std::error::Error for UpdateRoutesError<D, R> {}
+impl<D: Provider, R: Router> std::error::Error for UpdateRoutesError<D, R> {}
 
 #[cfg(test)]
 mod tests {

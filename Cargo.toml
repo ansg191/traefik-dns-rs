@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["aws"]
+default = ["aws", "cf"]
 
 aws = ["aws-config", "aws-sdk-route53"]
 cf = ["cloudflare"]
@@ -16,8 +16,10 @@ async-trait = "0.1.57"
 aws-config = { version = "0.51.0", optional = true }
 aws-sdk-route53 = { version = "0.21.0", optional = true }
 cloudflare = { version = "0.9.1", optional = true, default-features = false, features = ["rustls-tls"] }
+config = "0.13.2"
 futures = "0.3.24"
 once_cell = "1.16.0"
+parse_duration = "2.1.1"
 regex = "1.6.0"
 reqwest = { version = "0.11.12", features = ["json", "rustls-tls"], default-features = false }
 serde = { version = "1.0.145", features = ["derive"] }
