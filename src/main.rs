@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn run(mut cfg: Settings) -> Result<(), Box<dyn std::error::Error>> {
     let router = TraefikRouter::new(mem::take(&mut cfg.traefik_url))?;
 
-    let update_interval = parse_duration::parse(&cfg.update_interval)?;
+    let update_interval = cfg.update_interval.parse::<humantime::Duration>()?.into();
 
     match cfg.provider {
         #[cfg(feature = "aws")]
