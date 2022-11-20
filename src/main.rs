@@ -29,9 +29,10 @@ async fn run(mut cfg: Settings) -> Result<(), Box<dyn std::error::Error>> {
 
     match cfg.provider {
         #[cfg(feature = "aws")]
-        Provider::Route53(cfg) => run_route53(router, update_interval, cfg).await,
+        Some(Provider::Route53(cfg)) => run_route53(router, update_interval, cfg).await,
         #[cfg(feature = "cf")]
-        Provider::Cloudflare(cfg) => run_cloudflare(router, update_interval, cfg).await,
+        Some(Provider::Cloudflare(cfg)) => run_cloudflare(router, update_interval, cfg).await,
+        None => Err("No provider configured")?,
     }
 }
 
