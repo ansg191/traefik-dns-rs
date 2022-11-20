@@ -1,8 +1,47 @@
-use config::{Config, ConfigError, File};
-use serde::Deserialize;
+use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+use tracing::{debug, info};
+
+#[cfg(target_os = "linux")]
+static DEFAULT_SEARCH_PATHS: Lazy<[PathBuf; 3]> = Lazy::new(|| {
+    [
+        PathBuf::from("."),
+        PathBuf::from(
+            shellexpand::tilde(build_info::format!("~/.config/{}", $.crate_info.name)).into_owned(),
+        ),
+        PathBuf::from(build_info::format!("/etc/{}", $.crate_info.name)),
+    ]
+});
+
+#[cfg(target_os = "macos")]
+static DEFAULT_SEARCH_PATHS: Lazy<[PathBuf; 3]> = Lazy::new(|| {
+    [
+        PathBuf::from("."),
+        PathBuf::from(
+            shellexpand::tilde(build_info::format!("~/.config/{}", $.crate_info.name)).into_owned(),
+        ),
+        PathBuf::from(
+            shellexpand::tilde(
+                build_info::format!("~/Library/Application Support/{}", $.crate_info.name),
+            )
+            .into_owned(),
+        ),
+    ]
+});
+
+#[cfg(target_os = "windows")]
+static DEFAULT_SEARCH_PATHS: Lazy<[PathBuf; 3]> = Lazy::new(|| {
+    [
+        PathBuf::from("."),
+        PathBuf::from(
+            shellexpand::env(build_info::format!("%APPDATA%/{}", $.crate_info.name)).into_owned(),
+        ),
+    ]
+});
 
 #[cfg(feature = "aws")]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Route53Settings {
     pub zone_id: String,
     pub destination: String,
@@ -11,7 +50,7 @@ pub struct Route53Settings {
 }
 
 #[cfg(feature = "cf")]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct CloudflareSettings {
     pub zone_id: String,
     pub destination: String,
@@ -24,7 +63,7 @@ pub struct CloudflareSettings {
     pub proxied: Option<bool>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Provider {
     #[cfg(feature = "aws")]
@@ -33,21 +72,42 @@ pub enum Provider {
     Cloudflare(CloudflareSettings),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Settings {
     pub traefik_url: String,
     pub update_interval: String,
-    pub provider: Provider,
+    pub provider: Option<Provider>,
 }
 
 impl Settings {
     pub fn new() -> Result<Self, ConfigError> {
-        let cfg = Config::builder()
-            .add_source(File::with_name("config").required(false))
-            .add_source(File::with_name("/etc/traefik-dns-rs/config").required(false))
-            .add_source(config::Environment::with_prefix("APP"))
-            .build()?;
+        let path = Self::find_config().ok_or(ConfigError::NoConfigFound)?;
 
-        cfg.try_deserialize()
+        info!("Loading settings from {}", path.display());
+
+        let contents = std::fs::read_to_string(&path)?;
+
+        Ok(toml::from_str(&contents)?)
     }
+
+    fn find_config() -> Option<PathBuf> {
+        for path in &*DEFAULT_SEARCH_PATHS {
+            let config_path = path.join("config.toml");
+            debug!("Checking for config at {}", config_path.display());
+            if config_path.exists() {
+                return Some(config_path);
+            }
+        }
+        None
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ConfigError {
+    #[error("No config file found")]
+    NoConfigFound,
+    #[error(transparent)]
+    IoError(#[from] std::io::Error),
+    #[error(transparent)]
+    TomlError(#[from] toml::de::Error),
 }
