@@ -1,10 +1,6 @@
 #![allow(dead_code)]
 
-use crate::{
-    router::traefik::TraefikRouter,
-    settings::{Provider, Settings},
-    updater::Updater,
-};
+use crate::{router::traefik::TraefikRouter, settings::Settings};
 use std::{mem, time::Duration};
 
 mod dns;
@@ -22,16 +18,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     run(cfg).await
 }
 
+#[cfg_attr(not(any(feature = "cf", feature = "aws")), allow(unused_variables))]
 async fn run(mut cfg: Settings) -> Result<(), Box<dyn std::error::Error>> {
     let router = TraefikRouter::new(mem::take(&mut cfg.traefik_url))?;
 
-    let update_interval = cfg.update_interval.parse::<humantime::Duration>()?.into();
+    let update_interval: Duration = cfg.update_interval.parse::<humantime::Duration>()?.into();
 
     match cfg.provider {
         #[cfg(feature = "aws")]
-        Some(Provider::Route53(cfg)) => run_route53(router, update_interval, cfg).await,
+        Some(settings::Provider::Route53(cfg)) => run_route53(router, update_interval, cfg).await,
         #[cfg(feature = "cf")]
-        Some(Provider::Cloudflare(cfg)) => run_cloudflare(router, update_interval, cfg).await,
+        Some(settings::Provider::Cloudflare(cfg)) => {
+            run_cloudflare(router, update_interval, cfg).await
+        }
+        #[cfg(not(any(feature = "cf", feature = "aws")))]
+        Some(_) => panic!("Unsupported provider"),
         None => Err("No provider configured")?,
     }
 }
@@ -50,7 +51,7 @@ async fn run_route53(
         *provider.ttl_mut() = ttl;
     }
 
-    let updater = Updater::new(provider, router);
+    let updater = updater::Updater::new(provider, router);
 
     Ok(updater.run(update_interval).await?)
 }
@@ -82,7 +83,7 @@ async fn run_cloudflare(
         *provider.proxied_mut() = proxied;
     }
 
-    let updater = Updater::new(provider, router);
+    let updater = updater::Updater::new(provider, router);
 
     Ok(updater.run(update_interval).await?)
 }
