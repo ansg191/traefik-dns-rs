@@ -1,21 +1,85 @@
-#![allow(dead_code)]
+// Allow deprecated items to silence warnings from build_info.
+// TODO: Remove this when the build_info crate is updated.
+#![allow(dead_code, deprecated)]
 
 use crate::{router::traefik::TraefikRouter, settings::Settings};
 use std::{mem, time::Duration};
+use tracing::info;
 
 mod dns;
 mod router;
 mod settings;
 mod updater;
 
+build_info::build_info!(fn build_info);
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let subscriber = tracing_subscriber::FmtSubscriber::new();
+    let fmt = get_format();
+
+    let subscriber = tracing_subscriber::FmtSubscriber::builder()
+        .event_format(fmt)
+        .finish();
     tracing::subscriber::set_global_default(subscriber)?;
+
+    log_app_info();
 
     let cfg = Settings::new()?;
 
     run(cfg).await
+}
+
+#[cfg(debug_assertions)]
+fn get_format() -> tracing_subscriber::fmt::format::Format {
+    tracing_subscriber::fmt::format()
+        .with_thread_names(true)
+        .with_thread_ids(true)
+        .with_level(true)
+        .with_target(true)
+        .with_ansi(true)
+        .with_source_location(true)
+}
+
+#[cfg(not(debug_assertions))]
+fn get_format() -> tracing_subscriber::fmt::format::Format<tracing_subscriber::fmt::format::Json> {
+    tracing_subscriber::fmt::format()
+        .with_thread_names(false)
+        .with_thread_ids(false)
+        .with_level(true)
+        .with_target(false)
+        .with_ansi(false)
+        .with_source_location(false)
+        .json()
+        .with_current_span(true)
+        .with_span_list(true)
+}
+
+fn log_app_info() {
+    let info = build_info();
+
+    if let Some(build_info::VersionControl::Git(vc)) = &info.version_control {
+        info!(
+            version=%info.crate_info.version,
+            enabled_features=?info.crate_info.enabled_features,
+            rustc_version=%info.compiler.version,
+            profile=%info.profile,
+            git.commit_id=%vc.commit_short_id,
+            git.dirty=%vc.dirty,
+            git.branch=?vc.branch,
+            git.tags=?vc.tags,
+            "Starting up {}",
+            info.crate_info.name
+        );
+    } else {
+        info!(
+            version=%info.crate_info.version,
+            enabled_features=?info.crate_info.enabled_features,
+            rustc_version=%info.compiler.version,
+            profile=%info.profile,
+            "Starting up {}",
+            info.crate_info.name
+        );
+    }
 }
 
 #[cfg_attr(not(any(feature = "cf", feature = "aws")), allow(unused_variables))]
