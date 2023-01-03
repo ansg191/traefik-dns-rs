@@ -171,11 +171,6 @@ mod tests {
     fn mock_client(events: Vec<(String, String)>) -> aws_sdk_route53::Client {
         let creds = aws_types::Credentials::from_keys("test", "test", Some("test".to_string()));
 
-        let cfg = aws_sdk_route53::Config::builder()
-            .credentials_provider(creds)
-            .region(aws_types::region::Region::new("us-east-1"))
-            .build();
-
         let events = events
             .into_iter()
             .map(|(req, res)| {
@@ -190,7 +185,14 @@ mod tests {
 
         let conn = TestConnection::new(events);
         let conn = aws_smithy_client::erase::DynConnector::new(conn);
-        aws_sdk_route53::Client::from_conf_conn(cfg, conn)
+
+        let cfg = aws_sdk_route53::Config::builder()
+            .credentials_provider(creds)
+            .region(aws_types::region::Region::new("us-east-1"))
+            .http_connector(conn)
+            .build();
+
+        aws_sdk_route53::Client::from_conf(cfg)
     }
 
     #[test]
