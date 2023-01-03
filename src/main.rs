@@ -1,6 +1,4 @@
-// Allow deprecated items to silence warnings from build_info.
-// TODO: Remove this when the build_info crate is updated.
-#![allow(dead_code, deprecated)]
+#![allow(dead_code)]
 
 use crate::{router::traefik::TraefikRouter, settings::Settings};
 use std::{mem, time::Duration};
