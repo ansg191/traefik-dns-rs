@@ -1,6 +1,4 @@
-// Allow deprecated items to silence warnings from build_info.
-// TODO: Remove this when the build_info crate is updated.
-#![allow(dead_code, deprecated)]
+#![allow(dead_code)]
 
 use crate::{router::traefik::TraefikRouter, settings::Settings};
 use std::{mem, time::Duration};
@@ -15,11 +13,7 @@ build_info::build_info!(fn build_info);
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let fmt = get_format();
-
-    let subscriber = tracing_subscriber::FmtSubscriber::builder()
-        .event_format(fmt)
-        .finish();
+    let subscriber = get_subscriber();
     tracing::subscriber::set_global_default(subscriber)?;
 
     log_app_info();
@@ -30,28 +24,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(debug_assertions)]
-fn get_format() -> tracing_subscriber::fmt::format::Format {
-    tracing_subscriber::fmt::format()
+fn get_subscriber() -> impl tracing::Subscriber + Send + Sync + 'static {
+    tracing_subscriber::FmtSubscriber::builder()
         .with_thread_names(true)
         .with_thread_ids(true)
         .with_level(true)
         .with_target(true)
         .with_ansi(true)
-        .with_source_location(true)
+        .with_file(true)
+        .with_line_number(true)
+        .finish()
 }
 
 #[cfg(not(debug_assertions))]
-fn get_format() -> tracing_subscriber::fmt::format::Format<tracing_subscriber::fmt::format::Json> {
-    tracing_subscriber::fmt::format()
+fn get_subscriber() -> impl tracing::Subscriber + Send + Sync + 'static {
+    tracing_subscriber::FmtSubscriber::builder()
         .with_thread_names(false)
         .with_thread_ids(false)
         .with_level(true)
         .with_target(false)
         .with_ansi(false)
-        .with_source_location(false)
+        .with_file(false)
+        .with_line_number(false)
         .json()
         .with_current_span(true)
         .with_span_list(true)
+        .fmt_fields(tracing_subscriber::fmt::format::JsonFields::new())
+        .finish()
 }
 
 fn log_app_info() {
