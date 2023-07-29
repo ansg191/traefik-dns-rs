@@ -1,11 +1,15 @@
-use super::Provider;
 use aws_sdk_route53::{
-    error::{ChangeResourceRecordSetsError, ListResourceRecordSetsError},
-    model::{Change, ChangeAction, ChangeBatch, ResourceRecord, ResourceRecordSet, RrType},
-    types::SdkError,
+    operation::{
+        change_resource_record_sets::ChangeResourceRecordSetsError,
+        list_resource_record_sets::ListResourceRecordSetsError,
+    },
+    types::{Change, ChangeAction, ChangeBatch, ResourceRecord, ResourceRecordSet, RrType},
     Client,
 };
+use aws_smithy_http::result::SdkError;
 use thiserror::Error;
+
+use super::Provider;
 
 const DEFAULT_TTL: i64 = 300;
 
@@ -157,9 +161,11 @@ pub enum Route53Error {
 
 #[cfg(test)]
 mod tests {
-    use crate::{dns::route53::Route53Provider, dns::Provider};
+    use aws_credential_types::Credentials;
     use aws_smithy_client::test_connection::TestConnection;
     use aws_smithy_http::body::SdkBody;
+
+    use crate::dns::{route53::Route53Provider, Provider};
 
     /// Generates a mock client from a list of requests/responses.
     ///
@@ -169,7 +175,7 @@ mod tests {
     ///
     /// returns: Client
     fn mock_client(events: Vec<(String, String)>) -> aws_sdk_route53::Client {
-        let creds = aws_types::Credentials::from_keys("test", "test", Some("test".to_string()));
+        let creds = Credentials::from_keys("test", "test", None);
 
         let events = events
             .into_iter()
