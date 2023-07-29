@@ -1,12 +1,13 @@
-use crate::{dns::Provider, router::Router};
 use std::{
     collections::HashSet,
     fmt::{Debug, Display, Formatter},
     time::Duration,
 };
-use tokio::sync::Mutex;
-use tokio::{time, time::MissedTickBehavior};
+
+use tokio::{sync::Mutex, time, time::MissedTickBehavior};
 use tracing::{error, info};
+
+use crate::{dns::Provider, router::Router};
 
 #[derive(Debug)]
 pub struct Updater<D: Provider, R: Router> {

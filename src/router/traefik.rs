@@ -1,10 +1,11 @@
-use crate::router::Route;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest::{Client, IntoUrl, Url};
 use serde::Deserialize;
 use thiserror::Error;
 use tracing::debug;
+
+use crate::router::Route;
 
 // https://regex101.com/r/eTXvjo/1
 static HOST_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new("Host\\((.+?)\\)").unwrap());
@@ -89,9 +90,10 @@ struct TraefikRoute {
 
 #[cfg(test)]
 mod tests {
+    use httptest::{matchers::*, responders::*, Expectation, Server};
+
     use super::*;
     use crate::router::Router;
-    use httptest::{matchers::*, responders::*, Expectation, Server};
 
     #[test]
     fn test_parse_domains() {
