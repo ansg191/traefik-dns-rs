@@ -1,11 +1,15 @@
-use cloudflare::endpoints::dns::{
-    CreateDnsRecord, CreateDnsRecordParams, DeleteDnsRecord, DnsContent, DnsRecord, ListDnsRecords,
-    ListDnsRecordsParams,
+use cloudflare::{
+    endpoints::dns::{
+        CreateDnsRecord, CreateDnsRecordParams, DeleteDnsRecord, DnsContent, DnsRecord,
+        ListDnsRecords, ListDnsRecordsParams,
+    },
+    framework::{
+        async_api::{ApiClient, Client},
+        auth::Credentials,
+        response::ApiFailure,
+        Environment, HttpApiClientConfig,
+    },
 };
-use cloudflare::framework::async_api::{ApiClient, Client};
-use cloudflare::framework::auth::Credentials;
-use cloudflare::framework::response::ApiFailure;
-use cloudflare::framework::{Environment, HttpApiClientConfig};
 use thiserror::Error;
 
 const DEFAULT_TTL: u32 = 300;

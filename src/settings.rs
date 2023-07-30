@@ -1,6 +1,7 @@
+use std::path::PathBuf;
+
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use tracing::{debug, info};
 
 #[cfg(target_os = "linux")]

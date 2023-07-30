@@ -1,8 +1,10 @@
 #![allow(dead_code)]
 
-use crate::{router::traefik::TraefikRouter, settings::Settings};
 use std::{mem, time::Duration};
+
 use tracing::info;
+
+use crate::{router::traefik::TraefikRouter, settings::Settings};
 
 mod dns;
 mod router;
