@@ -1,44 +1,13 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
+use directories::ProjectDirs;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
-#[cfg(target_os = "linux")]
-static DEFAULT_SEARCH_PATHS: Lazy<[PathBuf; 3]> = Lazy::new(|| {
-    [
-        PathBuf::from("."),
-        PathBuf::from(
-            shellexpand::tilde(build_info::format!("~/.config/{}", $.crate_info.name)).into_owned(),
-        ),
-        PathBuf::from(build_info::format!("/etc/{}", $.crate_info.name)),
-    ]
-});
-
-#[cfg(target_os = "macos")]
-static DEFAULT_SEARCH_PATHS: Lazy<[PathBuf; 3]> = Lazy::new(|| {
-    [
-        PathBuf::from("."),
-        PathBuf::from(
-            shellexpand::tilde(build_info::format!("~/.config/{}", $.crate_info.name)).into_owned(),
-        ),
-        PathBuf::from(
-            shellexpand::tilde(
-                build_info::format!("~/Library/Application Support/{}", $.crate_info.name),
-            )
-            .into_owned(),
-        ),
-    ]
-});
-
-#[cfg(target_os = "windows")]
-static DEFAULT_SEARCH_PATHS: Lazy<[PathBuf; 3]> = Lazy::new(|| {
-    [
-        PathBuf::from("."),
-        PathBuf::from(
-            shellexpand::env(build_info::format!("%APPDATA%/{}", $.crate_info.name)).into_owned(),
-        ),
-    ]
+static PROJECT_DIRS: Lazy<ProjectDirs> = Lazy::new(|| {
+    ProjectDirs::from("com", "anshulg", "traefik-dns-rs")
+        .expect("Unable to find project directories")
 });
 
 #[cfg(feature = "aws")]
@@ -92,11 +61,20 @@ impl Settings {
     }
 
     fn find_config() -> Option<PathBuf> {
-        for path in &*DEFAULT_SEARCH_PATHS {
+        let paths = [
+            PROJECT_DIRS.config_dir(),
+            Path::new("."),
+            #[cfg(target_os = "linux")]
+            Path::new("/etc/traefik-dns-rs"),
+        ];
+        for path in paths {
             let config_path = path.join("config.toml");
             debug!("Checking for config at {}", config_path.display());
             if config_path.exists() {
+                debug!("Found config at {}", config_path.display());
                 return Some(config_path);
+            } else {
+                debug!("No config found at {}", config_path.display());
             }
         }
         None
