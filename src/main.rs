@@ -29,6 +29,7 @@ fn get_subscriber() -> impl tracing::Subscriber + Send + Sync + 'static {
         .with_ansi(true)
         .with_file(true)
         .with_line_number(true)
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .finish()
 }
 
@@ -42,6 +43,7 @@ fn get_subscriber() -> impl tracing::Subscriber + Send + Sync + 'static {
         .with_ansi(false)
         .with_file(false)
         .with_line_number(false)
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .json()
         .with_current_span(true)
         .with_span_list(true)
