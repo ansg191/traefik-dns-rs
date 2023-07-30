@@ -8,10 +8,8 @@ use tracing::{debug, info};
 static DEFAULT_SEARCH_PATHS: Lazy<[PathBuf; 3]> = Lazy::new(|| {
     [
         PathBuf::from("."),
-        PathBuf::from(
-            shellexpand::tilde(build_info::format!("~/.config/{}", $.crate_info.name)).into_owned(),
-        ),
-        PathBuf::from(build_info::format!("/etc/{}", $.crate_info.name)),
+        PathBuf::from(shellexpand::tilde("~/.config/traefik-dns-rs").into_owned()),
+        PathBuf::from("/etc/traefik-dns-rs"),
     ]
 });
 
@@ -19,14 +17,9 @@ static DEFAULT_SEARCH_PATHS: Lazy<[PathBuf; 3]> = Lazy::new(|| {
 static DEFAULT_SEARCH_PATHS: Lazy<[PathBuf; 3]> = Lazy::new(|| {
     [
         PathBuf::from("."),
+        PathBuf::from(shellexpand::tilde("~/.config/traefik-dns-rs").into_owned()),
         PathBuf::from(
-            shellexpand::tilde(build_info::format!("~/.config/{}", $.crate_info.name)).into_owned(),
-        ),
-        PathBuf::from(
-            shellexpand::tilde(
-                build_info::format!("~/Library/Application Support/{}", $.crate_info.name),
-            )
-            .into_owned(),
+            shellexpand::tilde("~/Library/Application Support/traefik-dns-rs").into_owned(),
         ),
     ]
 });
@@ -35,9 +28,7 @@ static DEFAULT_SEARCH_PATHS: Lazy<[PathBuf; 3]> = Lazy::new(|| {
 static DEFAULT_SEARCH_PATHS: Lazy<[PathBuf; 3]> = Lazy::new(|| {
     [
         PathBuf::from("."),
-        PathBuf::from(
-            shellexpand::env(build_info::format!("%APPDATA%/{}", $.crate_info.name)).into_owned(),
-        ),
+        PathBuf::from(shellexpand::env("%APPDATA%/traefik-dns-rs").into_owned()),
     ]
 });
 

@@ -2,8 +2,6 @@
 
 use std::{mem, time::Duration};
 
-use tracing::info;
-
 use crate::{router::traefik::TraefikRouter, settings::Settings};
 
 mod dns;
@@ -11,14 +9,10 @@ mod router;
 mod settings;
 mod updater;
 
-build_info::build_info!(fn build_info);
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let subscriber = get_subscriber();
     tracing::subscriber::set_global_default(subscriber)?;
-
-    log_app_info();
 
     let cfg = Settings::new()?;
 
@@ -53,34 +47,6 @@ fn get_subscriber() -> impl tracing::Subscriber + Send + Sync + 'static {
         .with_span_list(true)
         .fmt_fields(tracing_subscriber::fmt::format::JsonFields::new())
         .finish()
-}
-
-fn log_app_info() {
-    let info = build_info();
-
-    if let Some(build_info::VersionControl::Git(vc)) = &info.version_control {
-        info!(
-            version=%info.crate_info.version,
-            enabled_features=?info.crate_info.enabled_features,
-            rustc_version=%info.compiler.version,
-            profile=%info.profile,
-            git.commit_id=%vc.commit_short_id,
-            git.dirty=%vc.dirty,
-            git.branch=?vc.branch,
-            git.tags=?vc.tags,
-            "Starting up {}",
-            info.crate_info.name
-        );
-    } else {
-        info!(
-            version=%info.crate_info.version,
-            enabled_features=?info.crate_info.enabled_features,
-            rustc_version=%info.compiler.version,
-            profile=%info.profile,
-            "Starting up {}",
-            info.crate_info.name
-        );
-    }
 }
 
 #[cfg_attr(not(any(feature = "cf", feature = "aws")), allow(unused_variables))]
