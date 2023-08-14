@@ -25,7 +25,7 @@ regex = "1.9"
 reqwest = { version = "0.11", features = ["json", "rustls-native-certs"], default-features = false }
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"
-tokio = { version = "1.29", features = ["full"] }
+tokio = { version = "1.31", features = ["full"] }
 toml = "0.7"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
