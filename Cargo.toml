@@ -13,7 +13,7 @@ cf = ["cloudflare"]
 
 [dependencies]
 async-trait = "0.1"
-aws-config = { version = "0.55", optional = true }
+aws-config = { version = "0.56", optional = true }
 aws-sdk-route53 = { version = "0.28", optional = true }
 aws-smithy-http = { version = "0.55", optional = true }
 cloudflare = { version = "0.10.1", optional = true, default-features = false, features = ["rustls-tls"] }
