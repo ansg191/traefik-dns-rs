@@ -33,7 +33,7 @@ url = "2.4"
 
 [dev-dependencies]
 aws-credential-types = { version = "0.55", features = ["hardcoded-credentials"] }
-aws-smithy-client = { version = "0.55", features = ["test-util"] }
+aws-smithy-client = { version = "0.56", features = ["test-util"] }
 aws-types = "0.55"
 http = "0.2"
 httptest = "0.15"
